@@ -1,0 +1,11 @@
+[package]
+name = "negative-space-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core theory of negative space intelligence — intelligence is what you learn to AVOID, not what you choose"
+license = "MIT"
+repository = "https://github.com/SuperInstance/negative-space-core"
+keywords = ["intelligence", "avoidance", "conservation-law", "negative-space"]
+categories = ["science", "algorithms"]
+
+[dev-dependencies]
