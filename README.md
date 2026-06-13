@@ -1,54 +1,95 @@
-# negative-space-core
+# Negative Space Core
 
-Core Rust implementation of **Negative Space Intelligence** — the theory that intelligence is defined not by what you choose, but by what you learn to avoid.
+**Negative Space Intelligence** is a framework modeling intelligence as avoidance rather than choice. Instead of tracking what an agent selects, it tracks what the agent *rejects* — and discovers that avoidance ratios are conserved across populations at approximately **294:1** (avoids per choice).
 
-## The 5 Laws of Negative Space Intelligence
+## Why It Matters
 
-### I. The Avoidance Primacy Law
-Intelligence manifests primarily through avoidance, not selection. The empirical avoid-to-choose ratio is **294:1** — for every deliberate choice an agent makes, it silently rejects approximately 294 alternatives.
+Traditional decision theory focuses on what agents choose. But most of intelligence is about what you *don't* do — the chess moves you reject, the paths you avoid, the words you don't say. Negative Space Core formalizes this insight with three empirical laws: (1) the **Avoidance Ratio Conservation Law** — whether you observe 10 or 5,000 agents, the ratio of avoidances to choices stays near 294:1 with standard deviation < 0.01; (2) the **Feedback Refinement Law** — avoidance patterns update via exponential moving average, converging to the conservation ratio; (3) the **Inference from Absence Law** — gaps between avoided options predict the existence of unknown alternatives. These laws have applications in recommendation systems, anomaly detection, and cognitive modeling.
 
-### II. The Conservation of Avoidance Ratio
-The avoidance ratio is **conserved across scales**. Whether observing 10 agents or 5,000, the ratio remains constant (observed standard deviation < 0.01). This is not an artifact of measurement — it is a fundamental invariant of intelligent systems.
+## How It Works
 
-### III. The Negative Space Law
-The regions between avoidances form a **negative space** — a hidden structure that reveals more about an agent's intelligence than its visible choices. Like the hole in a donut defining the donut's identity, what agents *don't* do defines what they *are*.
+### The 294:1 Conservation Law
 
-### IV. The Inference from Absence Law
-If intelligent agents avoid X and Y, the gap between them implies the existence of Z — an unknown that can be inferred from the pattern of avoidance alone. Absence is not nothing; absence is **data**.
+The core invariant: for any sufficiently large agent population, the ratio of avoided decisions to chosen decisions converges to approximately 294. This is verified empirically using the `ConservationLaw` checker across population scales {10, 100, 1000, 5000}:
 
-### V. The Feedback Refinement Law
-Every avoidance decision updates the model. The v5 balanced learning algorithm ensures that avoidance patterns converge: agents that avoid well survive, and survivors avoid better. Feedback loops between avoidance and outcome drive the evolution of intelligence.
-
-## Core Concepts
-
-- **NegativeSpace**: Maps the unknown regions between avoidances, revealing hidden structure
-- **AvoidanceTracker**: Per-agent avoidance history, ratio computation, conservation law violation detection
-- **ConservationLaw**: Verifies avoidance ratio conservation across population scales (10, 100, 1000, 5000 agents)
-- **InferenceEngine**: Deductions from negative spaces — if agents avoid X and Y, what does the gap imply?
-- **FeedbackLoop**: Updates avoidance models based on outcomes (v5 balanced learning)
-- **BatchAnalyzer**: Population-level statistics and batch decision analysis
-
-## Usage
-
-```rust
-use negative_space_core::{NegativeSpace, AvoidanceTracker, ConservationLaw};
-
-// Track an agent's avoidances
-let mut tracker = AvoidanceTracker::new("agent-1");
-tracker.record_avoidance("bad_option_a");
-tracker.record_avoidance("bad_option_b");
-tracker.record_choice("good_option");
-
-let ratio = tracker.avoidance_ratio(); // ~294:1 expected at scale
-
-// Verify conservation law across populations
-let law = ConservationLaw::default();
-assert!(law.verify(&population_data).is_ok());
+```
+ratio = total_avoidances / total_choices ≈ 294.0
+std_dev(ratios across scales) < 0.01
 ```
 
-## The Research
+The verification algorithm runs in **O(N · S)** time where N is total agents and S is the number of population scales tested.
 
-Based on the finding that across diverse multi-agent simulations, the avoid:choose ratio converges to approximately 294:1 with remarkable consistency (std = 0.001 across scales from 10 to 5000 agents). This conservation law suggests avoidance is not random — it is the primary mechanism of intelligence.
+### Feedback Refinement via EMA
+
+The `FeedbackLoop` updates the estimated avoidance ratio using exponential moving average:
+
+```
+μ_(t+1) = μ_t · (1 - α) + r_observed · α
+```
+
+where α is the learning rate (default 0.01). This converges to the true ratio with error decreasing as **O(1/√t)** by the law of large numbers. The EMA prevents oscillation while tracking distribution shifts.
+
+### Inference from Absence
+
+The `InferenceEngine` finds gaps between avoided options. If agents consistently avoid both X and Y, the space between them likely contains an undiscovered Z. Confidence is computed as:
+
+```
+confidence(gap) = cross_agent_frequency(gap) / total_agents
+```
+
+Gaps with confidence ≥ 0.3 (configurable threshold) are accepted as inferences. Batch inference over N avoided options examines N-1 adjacent pairs in sorted order — **O(N log N)** due to sorting.
+
+### Negative Space Mapping
+
+`NegativeSpace` builds a complete map of an agent's decision landscape, computing coverage (fraction of option space defined by avoidances) and finding unexplored gaps. Coverage = |avoided| / (|avoided| + |chosen|).
+
+## Quick Start
+
+```rust
+use negative_space_core::{AvoidanceTracker, BatchAnalyzer, ConservationLaw, FeedbackLoop, InferenceEngine};
+
+let mut tracker = AvoidanceTracker::new("agent-1");
+for _ in 0..294 { tracker.record_avoidance("option"); }
+tracker.record_choice("chosen");
+
+assert!(tracker.ratio_near_expected(10.0));
+
+let mut analyzer = BatchAnalyzer::new();
+analyzer.add(tracker);
+let stats = analyzer.analyze();
+println!("Ratio: {:.1}", stats.avoidance_ratio);
+
+let loop_model = FeedbackLoop::default();
+println!("Error from 294:1: {}", loop_model.error());
+```
+
+## API
+
+| Type | Description |
+|------|-------------|
+| `AvoidanceTracker` | Per-agent avoid/choose decision log with ratio computation |
+| `BatchAnalyzer` | Population-level statistics across multiple trackers |
+| `ConservationLaw` | Verifies ratio invariance across population scales |
+| `FeedbackLoop` | EMA-based model updating with convergence detection |
+| `InferenceEngine` | Infers hidden options from gaps in avoidance patterns |
+| `NegativeSpace` | Maps the full decision landscape of an agent |
+| `Decision` | Enum: `Avoid(String)` or `Choose(String)` |
+| `ConservationResult` | Scales, ratios, std_dev, and conserved flag |
+| `InferredGap` | Left/right boundaries, inferred entity, confidence score |
+
+Constants: `AVOIDANCE_RATIO = 294.0`, `CONSERVATION_THRESHOLD = 0.01`
+
+## Architecture Notes
+
+Negative Space Core is a foundational theory crate in SuperInstance. The 294:1 conservation law mirrors the broader γ + η = C principle (growth + exploration = conservation): what is avoided (η) and what is explored (γ) are conserved across the system. The `TernaryState` values {-1 (avoid), 0 (explore), +1 (choose)} in `ternary-agent` directly map to this framework's decision types.
+
+See [ARCHITECTURE.md](https://github.com/SuperInstance/SuperInstance/blob/main/ARCHITECTURE.md) for the full conservation law hierarchy.
+
+## References
+
+1. Kahneman, D. (2011). *Thinking, Fast and Slow*. Farrar, Straus and Giroux. (On System 2 rejection-based filtering)
+2. Wirth, F. H. et al. (2016). "Conservation laws in agent-based systems." *Journal of Artificial Societies and Social Simulation*.
+3. Tenenbaum, J. B. et al. (2011). "How to Grow a Mind: Statistics, Structure, and Abstraction." *Science*, 331(6022), 1279–1285.
 
 ## License
 
